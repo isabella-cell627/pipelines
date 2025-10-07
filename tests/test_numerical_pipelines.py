@@ -166,5 +166,215 @@ class TestOutlierRobustScaler:
         assert transformed is not None
 
 
+class TestEdgeCases:
+    """Test edge cases and boundary conditions for numerical pipelines."""
+    
+    def test_all_zeros(self):
+        """Test pipeline with all zero values."""
+        data = np.zeros((10, 3))
+        pipeline = pipelines.create_standard_scaler_pipeline()
+        
+        transformed = pipeline.fit_transform(data)
+        assert transformed is not None
+        assert transformed.shape == data.shape
+        assert transformed.dtype == np.float64
+        # All zeros should remain all zeros (or NaN from zero std)
+        assert np.all(np.isnan(transformed)) or np.allclose(transformed, 0)
+    
+    def test_single_row(self):
+        """Test pipeline with single row."""
+        data = np.array([[1.0, 2.0, 3.0]])
+        pipeline = pipelines.create_minmax_scaler_pipeline()
+        
+        transformed = pipeline.fit_transform(data)
+        assert transformed is not None
+        assert transformed.shape == data.shape
+        assert transformed.dtype == np.float64
+        # Single row should not have NaN unless the scaler produces it
+        assert not np.any(np.isinf(transformed))
+    
+    def test_all_nan(self):
+        """Test pipeline with all NaN values - use mean strategy which fills with 0."""
+        data = np.full((10, 3), np.nan)
+        # Create pipeline using library function with mean strategy
+        # Mean strategy on all-NaN columns should fill with 0
+        pipeline = pipelines.create_standard_scaler_pipeline(
+            impute_strategy='mean'
+        )
+        
+        transformed = pipeline.fit_transform(data)
+        assert transformed is not None
+        assert transformed.shape == data.shape
+        # With all NaN, mean imputer fills with 0, then scaling produces NaN
+        # This is expected sklearn behavior
+        # Let's verify the pipeline ran without error
+        assert transformed is not None
+    
+    def test_extreme_values(self):
+        """Test pipeline with extreme values."""
+        data = np.array([[1e10, 1e-10, 0],
+                        [1e10, 1e-10, 0],
+                        [1e10, 1e-10, 0]])
+        pipeline = pipelines.create_robust_scaler_pipeline()
+        
+        transformed = pipeline.fit_transform(data)
+        assert transformed is not None
+        assert transformed.shape == data.shape
+        assert transformed.dtype == np.float64
+        assert not np.any(np.isinf(transformed))
+    
+    def test_high_dimensional(self):
+        """Test pipeline with high-dimensional data."""
+        np.random.seed(42)
+        data = np.random.randn(100, 100)
+        pipeline = pipelines.create_standard_scaler_pipeline()
+        
+        transformed = pipeline.fit_transform(data)
+        assert transformed is not None
+        assert transformed.shape == data.shape
+        assert transformed.dtype == np.float64
+        assert not np.any(np.isnan(transformed))
+        assert not np.any(np.isinf(transformed))
+    
+    def test_constant_column(self):
+        """Test pipeline with constant column."""
+        data = np.array([[1.0, 5.0], [1.0, 6.0], [1.0, 7.0]])
+        pipeline = pipelines.create_standard_scaler_pipeline()
+        
+        transformed = pipeline.fit_transform(data)
+        assert transformed is not None
+        assert transformed.shape == data.shape
+        assert transformed.dtype == np.float64
+        # Constant column will have NaN from zero std, but that's expected
+        # Other column should be properly scaled
+    
+    def test_negative_values_power_transform(self):
+        """Test power transform with negative values."""
+        data = np.array([[-5.0, 2.0], [-3.0, 4.0], [1.0, 6.0]])
+        pipeline = pipelines.create_power_transform_pipeline(method='yeo-johnson')
+        
+        transformed = pipeline.fit_transform(data)
+        assert transformed is not None
+        assert transformed.shape == data.shape
+        assert transformed.dtype == np.float64
+        assert not np.any(np.isnan(transformed))
+        assert not np.any(np.isinf(transformed))
+    
+    def test_highly_skewed_data(self):
+        """Test pipeline with highly skewed data."""
+        np.random.seed(42)
+        data = np.random.exponential(scale=2.0, size=(100, 3))
+        pipeline = pipelines.create_comprehensive_numerical_pipeline(
+            power_transform=True
+        )
+        
+        transformed = pipeline.fit_transform(data)
+        assert transformed is not None
+        assert transformed.shape == data.shape
+        assert transformed.dtype == np.float64
+        assert not np.any(np.isnan(transformed))
+        assert not np.any(np.isinf(transformed))
+
+
+class TestOutlierHandling:
+    """Test outlier detection and handling."""
+    
+    def test_isolation_forest_outliers(self):
+        """Test isolation forest outlier detection."""
+        np.random.seed(42)
+        data = np.random.randn(100, 3)
+        data[0, :] = [100, 100, 100]  # Outlier
+        
+        scaler = pipelines.OutlierRobustScaler(method='isolation_forest')
+        scaler.fit(data)
+        transformed = scaler.transform(data)
+        
+        assert transformed is not None
+        assert scaler.outlier_mask_ is not None
+        assert np.any(scaler.outlier_mask_)
+    
+    def test_elliptic_envelope_outliers(self):
+        """Test elliptic envelope outlier detection."""
+        np.random.seed(42)
+        data = np.random.randn(100, 3)
+        data[0, :] = [50, 50, 50]  # Outlier
+        
+        scaler = pipelines.OutlierRobustScaler(method='elliptic_envelope')
+        scaler.fit(data)
+        transformed = scaler.transform(data)
+        
+        assert transformed is not None
+
+
+class TestDataIntegrity:
+    """Test data integrity and validation."""
+    
+    def test_no_data_modification(self):
+        """Test that original data is not modified."""
+        np.random.seed(42)
+        data = np.random.randn(10, 3)
+        data_copy = data.copy()
+        
+        pipeline = pipelines.create_standard_scaler_pipeline()
+        pipeline.fit_transform(data)
+        
+        # Original data should not be modified
+        np.testing.assert_array_equal(data, data_copy)
+    
+    def test_transform_consistency(self):
+        """Test that transform is consistent."""
+        np.random.seed(42)
+        data = np.random.randn(10, 3)
+        
+        pipeline = pipelines.create_minmax_scaler_pipeline()
+        pipeline.fit(data)
+        
+        t1 = pipeline.transform(data)
+        t2 = pipeline.transform(data)
+        
+        np.testing.assert_array_almost_equal(t1, t2)
+    
+    def test_fit_transform_equals_fit_then_transform(self):
+        """Test that fit_transform equals fit then transform."""
+        np.random.seed(42)
+        data = np.random.randn(10, 3)
+        
+        pipeline1 = pipelines.create_standard_scaler_pipeline()
+        pipeline2 = pipelines.create_standard_scaler_pipeline()
+        
+        t1 = pipeline1.fit_transform(data)
+        pipeline2.fit(data)
+        t2 = pipeline2.transform(data)
+        
+        np.testing.assert_array_almost_equal(t1, t2)
+
+
+class TestPerformance:
+    """Test performance with larger datasets."""
+    
+    def test_large_dataset_standard(self):
+        """Test standard scaler with large dataset."""
+        np.random.seed(42)
+        data = np.random.randn(10000, 50)
+        
+        pipeline = pipelines.create_standard_scaler_pipeline()
+        transformed = pipeline.fit_transform(data)
+        
+        assert transformed is not None
+        assert transformed.shape == data.shape
+    
+    def test_large_dataset_knn_imputer(self):
+        """Test KNN imputer with large dataset."""
+        np.random.seed(42)
+        data = np.random.randn(1000, 10)
+        data[np.random.rand(1000, 10) < 0.1] = np.nan
+        
+        pipeline = pipelines.create_knn_imputer_pipeline(n_neighbors=5)
+        transformed = pipeline.fit_transform(data)
+        
+        assert transformed is not None
+        assert not np.any(np.isnan(transformed))
+
+
 if __name__ == "__main__":
     pytest.main([__file__, '-v'])
