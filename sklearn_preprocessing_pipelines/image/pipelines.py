@@ -303,7 +303,7 @@ class ImageResizer(BaseEstimator, TransformerMixin):
             'dtype': self.dtype
         }
     
-    def set_params(self, **params) -> 'AdvancedImageResizer':
+    def set_params(self, **params) -> 'ImageResizer':
         """Set parameters for this estimator."""
         for key, value in params.items():
             setattr(self, key, value)
@@ -415,8 +415,10 @@ class ImageNormalizer(BaseEstimator, TransformerMixin):
             stats['min'] = X.min(axis=axis, keepdims=True)
             stats['max'] = X.max(axis=axis, keepdims=True)
         
-        if self.method in ['standard', 'adaptive']:
+        if self.method in ['standard', 'adaptive', 'mean']:
             stats['mean'] = X.mean(axis=axis, keepdims=True)
+        
+        if self.method in ['standard', 'adaptive']:
             stats['std'] = X.std(axis=axis, keepdims=True)
         
         if self.method == 'robust':
@@ -484,7 +486,7 @@ class ImageNormalizer(BaseEstimator, TransformerMixin):
         return np.clip(X_normalized, 0, 1) if self.method in ['minmax', 'divide255'] else X_normalized
     
     @timing_decorator
-    def fit(self, X: np.ndarray, y=None) -> 'AdvancedImageNormalizer':
+    def fit(self, X: np.ndarray, y=None) -> 'ImageNormalizer':
         """Fit the normalizer to compute statistics."""
         if not isinstance(X, np.ndarray):
             X = np.array(X)
@@ -638,7 +640,7 @@ class ImageFlattener(BaseEstimator, TransformerMixin):
         return X_flat
     
     @timing_decorator
-    def fit(self, X: np.ndarray, y=None) -> 'AdvancedImageFlattener':
+    def fit(self, X: np.ndarray, y=None) -> 'ImageFlattener':
         """Fit the flattener (computes feature selection if needed)."""
         if not isinstance(X, np.ndarray):
             X = np.array(X)

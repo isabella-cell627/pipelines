@@ -82,8 +82,10 @@ class SmartImputer(BaseEstimator, TransformerMixin):
                 imp.fit(X[[col]])
                 self.num_imputers_[col] = imp
             else:
-                fill_value = 'missing' if strategy == 'constant' else None
-                imp = SimpleImputer(strategy=strategy, fill_value=fill_value)
+                if strategy == 'constant':
+                    imp = SimpleImputer(strategy='constant', fill_value='missing')
+                else:
+                    imp = SimpleImputer(strategy='most_frequent')
                 imp.fit(X[[col]])
                 self.cat_imputers_[col] = imp
             
@@ -98,6 +100,9 @@ class SmartImputer(BaseEstimator, TransformerMixin):
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         check_is_fitted(self)
         X = X.copy()
+        
+        # Convert None to NaN for proper imputation
+        X = X.replace({None: np.nan})
         
         for col in X.columns:
             if col in self.num_imputers_:
@@ -236,6 +241,8 @@ class DynamicEncoder(BaseEstimator, TransformerMixin):
             if strategy == 'auto':
                 strategy = self._auto_select_encoding(X_clean, y)
             
+            encoder = None
+            
             if strategy == 'onehot':
                 encoder = OneHotEncoder(
                     handle_unknown='ignore', 
@@ -251,6 +258,11 @@ class DynamicEncoder(BaseEstimator, TransformerMixin):
             elif strategy == 'target' and y is not None:
                 target_means = y.groupby(X_clean).mean().to_dict()
                 encoder = target_means
+            else:
+                # Default to frequency encoding if no match
+                freq_encoding = X_clean.value_counts().to_dict()
+                encoder = freq_encoding
+                strategy = 'frequency'
             
             self.encoders_[col] = (strategy, encoder)
             self.category_mappings_[col] = X_clean.unique().tolist()

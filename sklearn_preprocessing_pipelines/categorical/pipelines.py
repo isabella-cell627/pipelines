@@ -132,8 +132,7 @@ def create_onehot_encoder_pipeline(
     # Configure one-hot encoder with advanced parameters
     encoder_params = {
         'handle_unknown': handle_unknown,
-        'sparse_output': sparse_output,
-        'handle_missing': handle_missing
+        'sparse_output': sparse_output
     }
     
     # Add optional parameters if provided
@@ -267,9 +266,10 @@ def create_categorical_imputer_pipeline(
             fill_value = 'MISSING'
     
     # Configure imputer with advanced options
-    imputer_params = {'strategy': strategy}
+    imputer_params = {}
+    imputer_params['strategy'] = strategy if strategy != 'mode_based' and strategy != 'advanced_constant' else 'most_frequent'
     
-    if strategy == 'constant':
+    if strategy == 'constant' or strategy == 'advanced_constant':
         imputer_params['fill_value'] = fill_value
     
     if add_missing_indicator:
@@ -344,8 +344,7 @@ def create_comprehensive_categorical_pipeline(
     if encoding_type == 'onehot':
         encoder_params = {
             'handle_unknown': handle_unknown,
-            'sparse_output': sparse_output,
-            'handle_missing': 'error'
+            'sparse_output': sparse_output
         }
         
         if max_categories is not None:
@@ -366,11 +365,21 @@ def create_comprehensive_categorical_pipeline(
         encoder = OrdinalEncoder(**encoder_params)
     
     # Create comprehensive pipeline
+    # Map imputer strategy to valid sklearn strategy
+    sklearn_strategy = 'most_frequent'
+    fill_val = None
+    if imputer_strategy in ['most_frequent', 'mode_based']:
+        sklearn_strategy = 'most_frequent'
+    elif imputer_strategy in ['constant', 'advanced_constant']:
+        sklearn_strategy = 'constant'
+        fill_val = 'COMPREHENSIVE_MISSING' if imputer_strategy == 'advanced_constant' else 'MISSING'
+    
+    imputer_kwargs = {'strategy': sklearn_strategy}
+    if fill_val is not None:
+        imputer_kwargs['fill_value'] = fill_val
+    
     return Pipeline([
-        ('sophisticated_imputer', SimpleImputer(
-            strategy=imputer_strategy.replace('_', ' ').title(), 
-            fill_value='COMPREHENSIVE_MISSING' if imputer_strategy == 'advanced_constant' else None
-        )),
+        ('sophisticated_imputer', SimpleImputer(**imputer_kwargs)),
         ('advanced_encoder', encoder)
     ])
 

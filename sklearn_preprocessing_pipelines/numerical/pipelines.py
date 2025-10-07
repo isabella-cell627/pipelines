@@ -189,6 +189,9 @@ class OutlierRobustScaler(BaseEstimator, TransformerMixin):
         X = self._validate_data(X, reset=False)
         X_transformed = X.copy()
         
+        if self.scale_ is None or self.center_ is None:
+            raise RuntimeError("Transformer must be fitted before calling transform")
+        
         for col_idx in range(X.shape[1]):
             col_data = X[:, col_idx]
             mask = ~np.isnan(col_data)
@@ -299,6 +302,9 @@ class AdaptivePowerTransformer(BaseEstimator, TransformerMixin):
     def transform(self, X: np.ndarray) -> np.ndarray:
         X = self._validate_data(X, reset=False)
         X_transformed = X.copy()
+        
+        if self.lambdas_ is None or self.optimized_methods_ is None:
+            raise RuntimeError("Transformer must be fitted before calling transform")
         
         for col_idx in range(X.shape[1]):
             col_data = X[:, col_idx]
